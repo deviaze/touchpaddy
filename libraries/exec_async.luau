@@ -67,29 +67,31 @@ local function shellAsync(cmd: string, options: {timeout: number?}?): AsyncHandl
 	} | {
 		ok: false,
 		err: string | "timeout",
-		Retry: (self: AsyncResult) -> AsyncHandle,
+		retry: (self: AsyncResult) -> AsyncHandle,
 	}
 
-	function AsyncHandle.with(self: AsyncHandle, callback: (self: AsyncHandle, result: AsyncResult) -> ())
+	function AsyncHandle.spawn(self: AsyncHandle, callback: (result: AsyncResult, handle: AsyncHandle) -> ())
 		task.spawn(function()
 			task.delay(if options and options.timeout then options.timeout else 1, function()
-				handle.kill()
+				pcall(function() -- we don't have a sensible way of determining whether process has completed or not; handle.status() yields so that's not what we want
+					handle.kill()
+				end)
 			end)
 			local stdout = handle.stdout:readToEnd()
 			local stderr = handle.stderr:readToEnd()
 			if #stdout > #stderr then
-				callback(AsyncHandle, { 
+				callback({ 
 					ok = true, 
 					out = stdout 
-				})
+				}, AsyncHandle)
 			else
-				callback(AsyncHandle, {
+				callback({
 					ok = false,
 					err = stderr,
-					Retry = function(self: AsyncResult)
+					retry = function(self: AsyncResult)
 						return shellAsync(cmd, nil, { timeout = if options and options.timeout then options.timeout else 1 })
 					end
-				})
+				}, AsyncHandle)
 			end
 		end)
 	end
@@ -108,7 +110,7 @@ local function shellAsync(cmd: string, options: {timeout: number?}?): AsyncHandl
 	end
 
 	function AsyncHandle.await(self: AsyncHandle)
-		local result = handle.stdout:readToEnd()
+		local result: string = handle.stdout:readToEnd()
 		if result then
 			return {
 				ok = true,

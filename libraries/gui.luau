@@ -93,9 +93,9 @@ local function prompt(options: DialogOptions)
 	if button_response then
 		button_response = button_response:gsub("%s", "")
 	end
-	if handler.status().ok then
-		handler.kill()
-	end
+	pcall(function()
+		handler.kill() -- no non-yielding way to check if process killed yet or not. kill it anyway lol
+	end)
 
 	return button_response
 end

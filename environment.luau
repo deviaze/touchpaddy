@@ -9,6 +9,20 @@ local shell = execs.shell
 
 local Environment = {}
 
+local has_valid_lune_lunestream_version = if (process :: any).create then true else false
+if not has_valid_lune_lunestream_version then
+	local stdio = require("@lune/stdio")
+	local color = stdio.color
+	local b, r = color("blue"), color("reset")
+	error(`{color("yellow")}touchpaddy requires lune-process-stream,\n or (if it's the future!), any version of Lune with process.create and process.exec (0.9.0+?){r}\n\n\z
+	To install lunestream:\n\z
+	{b}1{r}. clone {color("cyan")}https://github.com/0x5eal/lune-process-stream{r}\n\z
+	{b}2{r}. build the repo with {color("green")}cargo b --release{r}\n\z
+	{b}3{r}. rename the resulting binary {color("green")}"lunestream"{r}\n\z
+	{b}4{r}. add lunestream to your PATH\n\z
+	`)
+end
+
 type PlatformType = {
 	OS: "Windows" | "Linux" | "MacOS",
 	DesktopEnvironment: "Windows" | "KDE" | "GNOME" | "Other",
@@ -36,50 +50,37 @@ if process.os == "linux" then
 
 		if Environment.PlatformType.DesktopEnvironment == "KDE" then
 			-- assert we have the right deps installed
-			local kdotool_ok = if shell("kdotool --help").ok then true else false
-			local session_type = Environment.PlatformType.SessionType
-			local xydotool_ok: boolean = if session_type == "X11"
-				then shell("xdotool --help").ok
-				elseif session_type == "Wayland" then shell("ydotool --help").ok
-				else false
-
-			if not kdotool_ok or not xydotool_ok then
-				local columns = { "For", "Dependency", "Link (double click to copy)" } :: { string }
-				local entries: { { string } } = {}
-				if not kdotool_ok then
-					table.insert(entries, {
-						"KDE",
-						"kdotool: lets us move and open/close and tab through your windows",
-						"https://github.com/jinliu/kdotool",
-					})
+			local dependencies: {[string]: {string}} = {
+				yad = {"KDE", "yad: show guis", "https://github.com/v1cont/yad"},
+				screen = {"touchpaddy", "screen: allows us to run in background/daemonize", "please install screen via package manager"},
+				kdotool = {"KDE", "kdotool: lets us move, open/close, and tab through windows", "https://github.com/jinliu/kdotool"},
+				xdotool = {"X11", "xdotool: allows us to send keystrokes to control windows", "https://github.com/jordansissel/xdotool"},
+				ydotool = {"Wayland", "ydotool: wayland alternative to xdotool; less reliable! if issues, pls switch to X11", "https://github.com/ReimuNotMoe/ydotool"},
+			}
+			
+			local dependencies_failed: { { string } } = {}
+			for command, dependency_info in dependencies do 
+				local success = shell(command .. " --help").ok
+				if not success then
+					table.insert(dependencies_failed, dependency_info)
 				end
-				if not xydotool_ok then
-					local entry = if Environment.PlatformType.SessionType == "X11"
-						then {
-							"X11",
-							"xdotool: allows us to send kwin shortcuts by directly sending keystrokes",
-							"https://github.com/jordansissel/xdotool",
-						}
-						elseif Environment.PlatformType.SessionType == "Wayland" then {
-							"Wayland",
-							"ydotool: allows us to send kwin shortcuts\n -- A Little More Annoying And Not As Reliable As xdotool! -- consider switching to X11 if needed",
-							"https://github.com/ReimuNotMoe/ydotool",
-						}
-						else nil
+			end
 
-					if entry then
-						table.insert(entries, entry)
+			if #dependencies_failed > 0 then
+				if table.find(dependencies_failed, dependencies.yad) then
+					for _, dependency in dependencies_failed do
+						print("Missing dependency: " .. table.concat(dependency, " | "))
 					end
-				end
-
-				if #entries > 0 then
+					process.exit(1)
+				else
+					local columns = { "For", "Dependency", "Link (double click to copy)" } :: { string }
 					gui.prompt({
 						Title = "touchpaddy - dependencies not found",
 						Text = "We need the following programs !!\nPlease install them (package manager or PATH is ok!) and relaunch touchpaddy:",
 						List = {
 							ListType = "None",
 							Columns = columns,
-							Entries = entries,
+							Entries = dependencies_failed,
 							Options = {
 								Editable = true,
 								EditableColumns = { 3 },
@@ -96,8 +97,8 @@ if process.os == "linux" then
 							Height = 200,
 						},
 					})
+					process.exit(1)
 				end
-				process.exit(1)
 			end
 		end
 	end

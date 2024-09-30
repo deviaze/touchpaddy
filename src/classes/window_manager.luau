@@ -4,11 +4,14 @@ local task = require("@lune/task")
 local process = require("@lune/process")
 local fs = require("@lune/fs")
 
-local execs = require("@libraries/exec_async")
-
 local environment = require("@workspace/environment")
+local Input = require("@classes/input_controller")
+
+local execs = require("@libraries/exec_async")
 local shell = execs.shell
 local shellAsync = execs.shellAsync
+
+local gui = require("@libraries/gui")
 
 type WindowInfo = {
 	Id: string,
@@ -20,12 +23,40 @@ type WindowInfo = {
 local WindowManager = {
 	TrackedWindows = {} :: { [string]: WindowInfo },
 	LastActiveWindows = {} :: { string },
-	ActiveWindowId = "",
+	ActiveWindowId = "" :: string,
 }
+
+local PlatformType = environment.PlatformType
 
 type WindowManager = typeof(WindowManager)
 
-function WindowManager.GetWindow(self: WindowManager, pattern: string): WindowInfo?
+function WindowManager.GetActiveWindow(self: WindowManager): string?
+	if PlatformType.OS == "Linux" then
+		if PlatformType.DesktopEnvironment == "KDE" then
+			local result = shell("kdotool getactivewindow")
+			if result.ok then
+				local window_id: string? = result.out:match("({[%w%-]+})")
+				if window_id then
+					return window_id
+				end
+			end
+		end
+	end
+	return nil
+end
+
+function WindowManager.SwitchWindow(self: WindowManager, direction: "Left" | "Right")
+	if PlatformType.OS == "Linux" then
+		if PlatformType.SessionType == "X11" then
+			local keystrokes = if direction == "Left" then {"Alt", "Shift", "Tab"} else {"Alt", "Tab"}
+			Input:SendKeys(keystrokes)
+		end
+	end
+	return nil
+end
+
+
+function WindowManager.GetWindowInfo(self: WindowManager, pattern: string): WindowInfo?
 	for id, window_info in WindowManager.TrackedWindows do
 		if
 			window_info.Id == pattern
@@ -40,18 +71,28 @@ function WindowManager.GetWindow(self: WindowManager, pattern: string): WindowIn
 			return window_info :: WindowInfo
 		end
 	end
+	if PlatformType.OS == "Linux" then
+		if PlatformType.DesktopEnvironment == "KDE" then
+			local result = {
+				Id = pattern,
+			} :: WindowInfo
+			local window_name_result = shellAsync(`kdotool getwindowname {pattern}`):await()
+			if window_name_result.ok then
+				result.Name = window_name_result.out:gsub("\n", "")
+			else
+				print(window_name_result)
+			end
+			local class_name_result = shellAsync(`kdotool getwindowclassname {pattern}`):await()
+			if class_name_result.ok then
+				result.ClassName = class_name_result.out:gsub("\n", "")
+			end
+			result.LastAccessTime = os.clock()
+			WindowManager.TrackedWindows[pattern] = result
+			return result
+		end
+	end
 	return nil
 end
-
-local function getWindowInfo(window_id)
-	local window_info = WindowManager.TrackedWindows[window_id]
-	if not window_id then
-		error(`window w/ provided window_id does not exist. id: {window_id}`)
-	end
-	return window_info
-end
-
-local PlatformType = environment.PlatformType
 
 function WindowManager.ActivateWindow(self: WindowManager, window_id: string)
 	if PlatformType.OS == "Linux" then
@@ -70,7 +111,7 @@ end
 function WindowManager.MinimizeWindow(self: WindowManager, window_id: string)
 	if PlatformType.OS == "Linux" then
 		if PlatformType.DesktopEnvironment == "KDE" then
-			local result = shell(`kdotool windowminimize {window_id}`)
+			local result = shellAsync(`kdotool windowminimize {window_id}`):await()
 			return if result.ok then true else false
 		end
 	end
@@ -81,6 +122,10 @@ end
 function WindowManager.MaximizeWindow(self: WindowManager, window_id: string)
 	if PlatformType.OS == "Linux" then
 		if PlatformType.DesktopEnvironment == "KDE" then
+			if PlatformType.SessionType == "X11" then
+				Input:SendKeys{"Meta", "PageUp"}
+				return true
+			end
 			local result = shell(`xrandr | grep '*'`)
 			if result.ok then
 				local x, y = result.out:match("^[%s]*([%w]+)x([%w]+)%s") -- output in format "  1920x1080  60.00* ...."
@@ -109,7 +154,35 @@ function WindowManager.MaximizeWindow(self: WindowManager, window_id: string)
 	return false
 end
 
-function WindowManager.MoveWindow(self: WindowManager, window_id: string, delta: { x: number, y: number })
+function WindowManager.MoveWindow(self: WindowManager, window_id: string, position: { x: number, y: number })
+	if PlatformType.OS == "Linux" then
+		if PlatformType.DesktopEnvironment == "KDE" then
+			local command = "kdotool windowmove " .. window_id
+			if position.x <= 1 or position.y <= 1 then
+				position.x *= 100; position.x //= 1
+				position.y *= 100; position.y //= 1
+				
+				-- kdotool's rust code can handle percentages and strips the trailing %
+				command ..= ` {position.x}% {position.y}%`
+			else
+				position.x //= 1 -- round to integers
+				position.y //= 1
+
+				-- and it also handles regular pixels if you don't give it a %
+				command ..= ` {position.x} {position.y}`
+			end
+			local result = shell(command)
+			if result.ok then
+				return true
+			else
+				print(`issue moving window {window_id}: {result.err}`)
+			end
+		end
+	end
+	return false
+end
+
+function WindowManager.MoveWindowRelative(self: WindowManager, window_id: string, delta: { x: number, y: number })
 	delta.x = delta.x // 1
 	delta.y = delta.y // 1
 
@@ -118,6 +191,8 @@ function WindowManager.MoveWindow(self: WindowManager, window_id: string, delta:
 			local result = shell(`kdotool windowmove --relative {window_id} {delta.x} {delta.y}`)
 			if result.ok then
 				return true
+			else
+				print("issue moving window: " .. result.err)
 			end
 		end
 	end
@@ -131,6 +206,8 @@ function WindowManager.ResizeWindow(self: WindowManager, window_id: string, size
 			local result = shell(`kdotool windowsize {window_id} {size.x} {size.y}`)
 			if result.ok then
 				return true
+			else
+				print("issue resizing window:" .. result.err )
 			end
 		end
 	end
@@ -140,6 +217,11 @@ end
 
 function WindowManager.SnapWindow(self: WindowManager, window_id: string, side: "Left" | "Right")
 	if PlatformType.OS == "Linux" then
+		if PlatformType.SessionType == "X11" then
+			-- just send Meta Arrow Left if we're on X11 to benefit from multi window resize thing/etc.
+			Input:SendKeys{Input.Keys.Meta, side}
+			return true
+		end
 		if PlatformType.DesktopEnvironment == "KDE" then
 			-- get screen resolution
 			local result = shell(`xrandr | grep '*'`) -- whomever names linux commands needs to stop tbh
@@ -156,10 +238,12 @@ function WindowManager.SnapWindow(self: WindowManager, window_id: string, side: 
 
 				if screen_resolution.x and screen_resolution.y then
 					local resized_success =
-						self:ResizeWindow(window_id, { x = screen_resolution.x, y = screen_resolution.y })
-					local moved_success = self:MoveWindow(window_id, { x = 0, y = 0 })
+						self:ResizeWindow(window_id, { x = screen_resolution.x // 2, y = screen_resolution.y })
+					local moved_success = self:MoveWindow(window_id, { x = if side == "Left" then 0 else 0.5, y = 0 })
 					if resized_success and moved_success then
 						return true
+					else
+						print(`resz: {resized_success}, mov: {moved_success}`)
 					end
 				else
 					error(`xrandr screenresolution not a number? xrandr output: {result.out}`)
@@ -171,13 +255,27 @@ function WindowManager.SnapWindow(self: WindowManager, window_id: string, side: 
 	return false
 end
 
-function WindowManager.ShowTaskView()
+local task_view_shown = false
+
+function WindowManager.ShowTaskView(self: WindowManager)
 	if PlatformType.OS == "Linux" then
 		if PlatformType.DesktopEnvironment == "KDE" then
-			shell("xdotool Ctrl+F9")
+			Input:SendKeys{"Ctrl", "F9"}
 		end
+	elseif PlatformType.OS == "Windows" then
+		Input:SendKeys{"Win", "Tab"}
 	end
+	task_view_shown = true
 end
+
+function WindowManager.HideTaskView(self: WindowManager)
+	Input:SendKeys{Input.Keys.Esc}
+	task_view_shown = false
+end
+
+WindowManager.Events = {}
+
+local helper_fns = {}
 
 function WindowManager.Listen(self: WindowManager)
 	if PlatformType.OS == "Linux" then
@@ -191,8 +289,12 @@ function WindowManager.Listen(self: WindowManager)
 				When this happens, our window management cli utility for KDE, kdotool, emits a rust panic (code: 101)
 				Sometimes kdotool panics when KWin is recoverable, so we can just 'continue' and hope/assume kdotool won't panic
 				on the next iteration, but if we've gotten multiple failures in a row, we can assume KWin is legitimately crashed 
-				and we need to run a command to restart the KWin window manager:
-					`kwin_wayland --replace` -- (yes you run it on x11 and wayland and KWin wmconsole can break on both iirc)
+				and we need to run a commaif PlatformType.OS == "Linux" then
+		if PlatformType.DesktopEnvironment == "KDE" then
+			
+		end
+	endnd to restart the KWin window manager:
+					`kwin_wayland --replace` -- (yes.. you can run it on both x11 and wayland .. and KWin wmconsole can break on both iirc)
 				Unfortunately that command *can* suddenly crash/close firefox and vscode on Wayland, so we need to alert the user
 				to save their tabs/work before allowing us to restart the window manager
 			]]
@@ -200,21 +302,78 @@ function WindowManager.Listen(self: WindowManager)
 
 			local listener_thread = task.spawn(function()
 				while task.wait(0.25) do
-					local window_id_result = shellAsync("kdotool search"):await().out :: string?
-					if window_id_result then
-						if #window_id_result == 0 then
+					-- search all currently open windows, add missing ones to TrackedWindows
+					local search_result = shell("kdotool search")
+					local search_window_ids_output = if search_result.ok then search_result.out else nil
+					if search_window_ids_output then
+						if #search_window_ids_output == 0 then
 							-- kwin broke?
 							kwin_fail_count += 1
 							if kwin_fail_count > 10 then
+								helper_fns.kwin_broke()
 								break
 							end
 						else
-							local window_ids = window_id_result:split("\n")
+							local window_ids = search_window_ids_output:split("\n")
+							for _, window_id in window_ids do
+								if not WindowManager.TrackedWindows[window_id] then
+									WindowManager.TrackedWindows[window_id] = {
+										Id = window_id,
+										LastAccessTime = os.clock(),
+									} :: WindowInfo
+									local tracked_window_info = WindowManager.TrackedWindows[window_id]
+									shellAsync(`kdotool getwindowname {window_id}`):spawn(function(result)
+										if result.ok then
+											tracked_window_info.Name = result.out:gsub("\n", "")
+										end
+									end)
+									shellAsync(`kdotool getwindowclassname {window_id}`):spawn(function(result)
+										if result.ok then
+											tracked_window_info.ClassName = result.out:gsub("\n", "")
+										end
+									end)
+								end
+							end
+						end
+					end
+					-- Update ActiveWindowId
+					local active_window_id: string? = WindowManager:GetActiveWindow()
+					if active_window_id and WindowManager.ActiveWindowId ~= active_window_id then
+						if task_view_shown then
+							task_view_shown = false
+						end
+						WindowManager.ActiveWindowId = active_window_id
+					elseif active_window_id then
+						local tracked_active_window = WindowManager.TrackedWindows[active_window_id]
+						if tracked_active_window then
+							tracked_active_window.LastAccessTime = os.clock()
 						end
 					end
 				end
 			end)
 		end
+	end
+end
+
+function helper_fns.kwin_broke()
+	local gui_result = gui.prompt {
+		Title = "touchpaddy - kwin crash",
+		Text = "Apologies, it seems KWin crashed.\nWe need to restart KWin (kwin_wayland --replace), but if you're on Wayland, restarting KWin might close Firefox, Code OSS/VSCode, other Wayland-dependent programs.",
+		Buttons = {
+			{
+				ButtonText = "Okay, I've saved my work. Restart KWin",
+				ButtonResponse = "restart",
+			}, 
+			{
+				ButtonText = "Exit touchpaddy. I'll deal with KWin myself",
+				ButtonResponse = "exit"
+			}
+		}
+	} :: "restart" | "exit"
+	if gui_result == "restart" then
+		shell("kwin_wayland --replace")
+	else
+		process.exit(0)
 	end
 end
 
