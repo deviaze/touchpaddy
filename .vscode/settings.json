@@ -18,7 +18,7 @@
     "ruby": "ruby",
     "go": "go run",
     "lua": "lua",
-    "luau": "lunestream run src/$fileName",
+    "luau": "lunestream run .",
     "groovy": "groovy",
     "powershell": "powershell -ExecutionPolicy ByPass -File",
     "bat": "cmd /c",
@@ -66,6 +66,11 @@
   },
   "luau-lsp.require.mode": "relativeToFile",
   "luau-lsp.require.directoryAliases": {
-    "@lune/": "~/.lune/.typedefs/0.8.8/"
+    "@lune": "~/.lune/.typedefs/0.8.8/",
+    "@libraries": "./libraries/",
+    "@src": "./src/",
+    "@classes": "./src/classes/",
+    "@workspace": "./",
+    "@spec": "./spec/"
   }
 }

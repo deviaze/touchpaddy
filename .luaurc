@@ -1,0 +1,9 @@
+{
+	"aliases": {
+		"src": "./src/",
+		"libraries": "./libraries/",
+		"workspace": "./",
+		"classes": "./src/classes/",
+		"spec": "./spec/"
+	}
+}

@@ -2,11 +2,11 @@
 local process = require("@lune/process")
 local task = require("@lune/task")
 
-local executors = require("../libraries/exec_async.luau")
-local execAsync = executors.Async
-local exec = executors.Exec
+local execs = require("../libraries/exec_async.luau")
+local execAsync = execs.async
+local shell = execs.shell
 
-local spawnDialog = require("../libraries/spawn_dialog.luau").Prompt
+local spawnDialog = require("../libraries/gui.luau").Prompt
 
 type WindowInfo = {
 	WindowId: string,
@@ -36,9 +36,9 @@ local Windows = {
 		return nil
 	end,
 	GetWindowName = function(self: WindowHelper, window_id: string): string?
-		local result: string? = exec(`kdotool getwindowname {window_id}`)
-		if result then
-			return result
+		local result = shell(`kdotool getwindowname {window_id}`)
+		if result.ok then
+			return result.out
 		end
 		return nil
 	end,
@@ -53,8 +53,9 @@ local Windows = {
 			end
 		end
 		if window_id ~= "" then
-			local success = exec(`kdotool windowactivate {window_id}`)
-			return if success then true else nil
+			local result = shell(`kdotool windowactivate {window_id}`)
+			return if result.ok then true else nil
+			-- return if success then true else nil
 			-- print(reponse)
 		end
 		return nil
@@ -70,8 +71,8 @@ local Windows = {
 			end
 		end
 		if window_id ~= "" then
-			local success = exec(`kdotool windowminimize {window_id}`)
-			return if success then true else nil
+			local result = shell(`kdotool windowminimize {window_id}`)
+			return if result.ok then true else nil
 		end
 		return nil
 	end,
@@ -111,8 +112,8 @@ local Windows = {
 			local x = if side == "Right" then width // 2 else 0
 			local y = 0
 
-			local success = exec(`kdotool windowmove {window_id} {x} {y}`)
-			return if success then true else nil
+			local result = shell(`kdotool windowmove {window_id} {x} {y}`)
+			return if result.ok then true else nil
 		end
 		return nil
 	end,
@@ -129,12 +130,11 @@ local Windows = {
 			end
 		end
 		if window_id ~= "" then
-			local success = exec(`kdotool windowmove --relative {window_id} {delta.x} {delta.y}`)
-			if not success then
-				-- print(delta)
-				-- print(executors.ReadLastError())
+			local result = shell(`kdotool windowmove --relative {window_id} {delta.x} {delta.y}`)
+			if not result.ok then
+				print(result.err)
 			end
-			return if success then true else nil
+			return if result.ok then true else nil
 		end
 		return nil
 	end,
@@ -149,12 +149,8 @@ local Windows = {
 			end
 		end
 		if window_id ~= "" then
-			local success = exec(`kdotool windowsize {window_id} {size.x} {size.y}`)
-			if not success then
-				-- print(delta)
-				-- print(executors.ReadLastError())
-			end
-			return if success then true else nil
+			local result = shell(`kdotool windowsize {window_id} {size.x} {size.y}`)
+			return if result.ok then true else nil
 		end
 		return nil
 	end
@@ -189,36 +185,40 @@ local function listen()
 				end
 			end
 
+			local active_window_result = shell(`kdotool getactivewindow`)
+			if active_window_result.ok then
+				if num_kwin_fails > 0 then num_kwin_fails = 0 end
 
-			local activewindowid: string? = exec(`kdotool getactivewindow`)
-			if activewindowid then
-				activewindowid = activewindowid:gsub("%s", "")
-				if not Windows.CurrentWindows[activewindowid] then
-					-- it's probably desktop or plasma or smth we don't want to switch to with gestures
+				local active_window_id = active_window_result.out:gsub("%s", "")
+				if not Windows.CurrentWindows[active_window_id] then
+					-- current window is desktop or a kde toolbar which we don't want to switch to with gestures
 					continue
 				end
 
-				local index = table.find(Windows.LastActiveWindows, activewindowid)
-				if index and index ~= #Windows.LastActiveWindows then
-					table.remove(Windows.LastActiveWindows, index)
-					table.insert(Windows.LastActiveWindows, activewindowid)
-				elseif index == nil then
-					table.insert(Windows.LastActiveWindows, activewindowid)
+				local active_window_index = table.find(Windows.LastActiveWindows, active_window_id)
+				if not active_window_index then
+					table.insert(Windows.LastActiveWindows, active_window_index)
+				else
+					if active_window_index == #Windows.LastActiveWindows then
+						continue
+					else
+						table.remove(Windows.LastActiveWindows, active_window_index)
+						table.insert(Windows.LastActiveWindows, active_window_id)
+					end
 				end
 
-				Windows.ActiveWindowId = activewindowid
+				Windows.ActiveWindowId = active_window_id
 
-				if num_kwin_fails > 0 then
-					num_kwin_fails = 0
-				end
 			else
 				num_kwin_fails += 1
-				if num_kwin_fails > 10 then -- kwin can fail with a panic but works again on subsequent iterations??? only if it's been failing multiple times in a row should be prompt restart of whole kwin
-					break
-				else
+				if num_kwin_fails < 10 then
 					continue
+				else
+					print(active_window_result.err)
+					break
 				end
 			end
+
 		end
 
 		--- we'll only get here when the hacky way of executing KWin scripts breaks with the /Script error & requires a KWin restart.
@@ -238,7 +238,7 @@ local function listen()
 		} :: "restart" | "exit"
 		
 		if result == "restart" then
-			exec("kwin_wayland --replace")
+			shell("kwin_wayland --replace")
 			listen()
 		else
 			process.exit()
