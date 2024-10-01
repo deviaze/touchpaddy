@@ -30,7 +30,8 @@ if #process.args > 0 then
 	end
 else
 	local screen_result = shell(`screen -dmS "touchpaddy" {lune_version} run ./src/main.luau`)
+	local stdio = require("@lune/stdio")
+	print(`{stdio.color("green")}Launched touchpaddy as a background process!{stdio.color("reset")}\nIf something goes wrong, kill it with {stdio.color("red")}pkill {lune_version}{stdio.color("reset")}`)
 end
-
 
 return  "" --require("./src/main.luau")
