@@ -237,8 +237,7 @@ function WindowManager.SnapWindow(self: WindowManager, window_id: string, side: 
 				}
 
 				if screen_resolution.x and screen_resolution.y then
-					local resized_success =
-						self:ResizeWindow(window_id, { x = screen_resolution.x // 2, y = screen_resolution.y })
+					local resized_success = self:ResizeWindow(window_id, { x = screen_resolution.x // 2, y = screen_resolution.y })
 					local moved_success = self:MoveWindow(window_id, { x = if side == "Left" then 0 else 0.5, y = 0 })
 					if resized_success and moved_success then
 						return true
@@ -289,11 +288,7 @@ function WindowManager.Listen(self: WindowManager)
 				When this happens, our window management cli utility for KDE, kdotool, emits a rust panic (code: 101)
 				Sometimes kdotool panics when KWin is recoverable, so we can just 'continue' and hope/assume kdotool won't panic
 				on the next iteration, but if we've gotten multiple failures in a row, we can assume KWin is legitimately crashed 
-				and we need to run a commaif PlatformType.OS == "Linux" then
-		if PlatformType.DesktopEnvironment == "KDE" then
-			
-		end
-	endnd to restart the KWin window manager:
+				and we need to run a command to restart the KWin window manager:
 					`kwin_wayland --replace` -- (yes.. you can run it on both x11 and wayland .. and KWin wmconsole can break on both iirc)
 				Unfortunately that command *can* suddenly crash/close firefox and vscode on Wayland, so we need to alert the user
 				to save their tabs/work before allowing us to restart the window manager
@@ -304,38 +299,43 @@ function WindowManager.Listen(self: WindowManager)
 				while task.wait(0.25) do
 					-- search all currently open windows, add missing ones to TrackedWindows
 					local search_result = shell("kdotool search")
-					local search_window_ids_output = if search_result.ok then search_result.out else nil
-					if search_window_ids_output then
-						if #search_window_ids_output == 0 then
-							-- kwin broke?
-							kwin_fail_count += 1
-							if kwin_fail_count > 10 then
-								helper_fns.kwin_broke()
-								break
-							end
+					local kwin_success = if search_result.ok and #search_result.out > 0 then true else false
+					if kwin_success then
+						kwin_fail_count = 0
+					else
+						kwin_fail_count += 1
+						if kwin_fail_count > 10 then
+							helper_fns.kwin_broke()
+							break
 						else
-							local window_ids = search_window_ids_output:split("\n")
-							for _, window_id in window_ids do
-								if not WindowManager.TrackedWindows[window_id] then
-									WindowManager.TrackedWindows[window_id] = {
-										Id = window_id,
-										LastAccessTime = os.clock(),
-									} :: WindowInfo
-									local tracked_window_info = WindowManager.TrackedWindows[window_id]
-									shellAsync(`kdotool getwindowname {window_id}`):spawn(function(result)
-										if result.ok then
-											tracked_window_info.Name = result.out:gsub("\n", "")
-										end
-									end)
-									shellAsync(`kdotool getwindowclassname {window_id}`):spawn(function(result)
-										if result.ok then
-											tracked_window_info.ClassName = result.out:gsub("\n", "")
-										end
-									end)
-								end
-							end
+							-- kdotool might fail/panic/return nothing on one iteration and be fine the next
+							continue
 						end
 					end
+
+					local window_ids: { string } = if search_result.ok then search_result.out:split("\n") else {}
+					for _, window_id in window_ids do
+						local tracked_window_info = WindowManager.TrackedWindows[window_id]
+						if not tracked_window_info then
+							WindowManager.TrackedWindows[window_id] = {
+								Id = window_id,
+								LastAccessTime = os.clock(),
+							} :: WindowInfo
+							tracked_window_info = WindowManager.TrackedWindows[window_id]
+							shellAsync(`kdotool getwindowname {window_id}`):spawn(function(result)
+								if result.ok and tracked_window_info then
+									tracked_window_info.Name = result.out:gsub("\n", "")
+								end
+							end)
+							shellAsync(`kdotool getwindowclassname {window_id}`):spawn(function(result)
+								if result.ok and tracked_window_info then
+									tracked_window_info.ClassName = result.out:gsub("\n", "")
+								end
+							end)
+						end
+						
+					end
+
 					-- Update ActiveWindowId
 					local active_window_id: string? = WindowManager:GetActiveWindow()
 					if active_window_id and WindowManager.ActiveWindowId ~= active_window_id then
