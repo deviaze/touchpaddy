@@ -1,43 +1,6 @@
 local process = require("@lune/process")
 local task = require("@lune/task")
 
-local current_exceptions = {}
-
-local function execAsync(cmd: string)
-	local result: string?
-	local handle: process.ChildProcess?
-	task.spawn(function()
-		handle = process.create(cmd, nil, { shell = true })
-		result = handle.stdout:readToEnd()
-	end)
-	return {
-		Then = function(self: any, callback: (result: string) -> ())
-			task.spawn(function()
-				while result == nil do
-					task.wait()
-				end
-				if result ~= nil then
-					callback(result)
-				end
-			end)
-		end,
-		Await = function(self: any, timeout: number?): string
-			local start_time = os.clock()
-			while result == nil do
-				task.wait()
-				if timeout and os.clock() - start_time > timeout then
-					break
-				end
-			end
-			if result then
-				return result
-			else
-				error(`process returned nil or broke somehow {cmd}`)
-			end
-		end,
-	}
-end
-
 local function shellExec(cmd: string, forward_stdio: boolean?): { ok: true, out: string} | { ok: false, err: string }
 	local response = process.exec(cmd, nil, { shell = true, stdio = if forward_stdio then "forward" else nil })
 	if response.ok then
@@ -127,8 +90,6 @@ local function shellAsync(cmd: string, options: {timeout: number?}?): AsyncHandl
 end
 
 return {
-	async = execAsync,
 	shell = shellExec,
 	shellAsync = shellAsync,
-	stderrs = current_exceptions,
 }
