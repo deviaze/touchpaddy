@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"luau-lsp.fflags.override": {
+			"LuauSolverV2": "true",
+			"DebugLuauDeferredConstraintResolution": "true"
+		},
+		"luau-lsp.require.mode": "relativeToFile"
+	}
+}
