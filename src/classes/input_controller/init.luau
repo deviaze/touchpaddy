@@ -10,6 +10,8 @@ export type InputController = typeof(Input)
 
 local PlatformType = envionment.PlatformType
 
+local LinuxKeys = require("linux_keys")
+
 Input.Keys = {
 	Win = if PlatformType.OS == "Windows" then "Win" else "Super_L",
 	Meta = "Super_L",
@@ -22,21 +24,29 @@ Input.Keys = {
 	PageUp = if PlatformType.OS == "Linux" then "Page_Up" else "PageUp",
 }
 
-function Input.SendKeys(self: InputController, keystrokes: {string})
+--- Accepts string key combinations w/ plus + (ex. "Ctrl+C") and keys after another w/ comma ,
+function Input.SendKeys(self: InputController, keycodes: string)
+	if not keycodes or #keycodes == 0 or typeof(keycodes) == "table" then
+		if typeof(keycodes) == "table" then
+			print(`Input: attempt to pass table to Input:SendKeys; string expected`)
+		elseif #keycodes == 0 then
+			print('Input: attempt to pass "" to Input:SendKeys; string expected')
+		elseif not keycodes then
+			print('Input: attempt to pass nil | false into Input:SendKeys; string expected')
+		end
+		print(`Traceback: {debug.traceback(nil, 3)}`)
+		return false
+	end
+
 	if PlatformType.OS == "Linux" then
-		if PlatformType.SessionType == "X11" then
-			local parsed_keys = ""
-			for index, key in keystrokes do
-				if Input.Keys[key] then
-					key = Input.Keys[key]
-				end
-				parsed_keys ..= key .. if index < #keystrokes then "+" else ""
-			end
-			local result = shellAsync(`xdotool key {parsed_keys}`):await()
+		local key_downs_and_ups = LinuxKeys.parse(keycodes)
+		if key_downs_and_ups then
+			local result = shell(`ydotool key {key_downs_and_ups}`)
 			if result.ok then
 				return true
 			end
 		end
+		return false
 	end
 	return false
 end

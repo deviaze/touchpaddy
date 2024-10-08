@@ -47,14 +47,12 @@ end
 
 function WindowManager.SwitchWindow(self: WindowManager, direction: "Left" | "Right")
 	if PlatformType.OS == "Linux" then
-		if PlatformType.SessionType == "X11" then
-			local keystrokes = if direction == "Left" then {"Alt", "Shift", "Tab"} else {"Alt", "Tab"}
-			Input:SendKeys(keystrokes)
-		end
+		Input:SendKeys(
+			if direction == "Left" then "Alt+Shift+Tab" else "Alt+Tab"
+		)
 	end
 	return nil
 end
-
 
 function WindowManager.GetWindowInfo(self: WindowManager, pattern: string): WindowInfo?
 	for id, window_info in WindowManager.TrackedWindows do
@@ -119,35 +117,27 @@ function WindowManager.MinimizeWindow(self: WindowManager, window_id: string)
 	return false
 end
 
+function WindowManager.GetScreenResolution(self: WindowManager) -- unsure how this interacts w/ multimonitor setups atm
+	if PlatformType.OS == "Linux" then
+		local result = shell("xrandr | grep '*'") -- whomever names linux commands needs to stop tbh
+		if result.ok then
+			local x, y = result.out:match("^[%s]*([%w]+)x([%w]+)%s") -- output in format "  1920x1080  60.00* ...."
+			if tonumber(x) and tonumber(y) then
+				return {
+					x = tonumber(x) :: number,
+					y = tonumber(y) :: number,
+				}
+			end
+		end
+		error("error parsing screen resolution with xrandr")
+	end
+	error("error getting screen resolution")
+end
+
 function WindowManager.MaximizeWindow(self: WindowManager, window_id: string)
 	if PlatformType.OS == "Linux" then
 		if PlatformType.DesktopEnvironment == "KDE" then
-			if PlatformType.SessionType == "X11" then
-				Input:SendKeys{"Meta", "PageUp"}
-				return true
-			end
-			local result = shell(`xrandr | grep '*'`)
-			if result.ok then
-				local x, y = result.out:match("^[%s]*([%w]+)x([%w]+)%s") -- output in format "  1920x1080  60.00* ...."
-				if x == nil or y == nil then
-					error("error getting screen resolution with xrandr")
-				end
-
-				local screen_resolution = {
-					x = tonumber(x),
-					y = tonumber(y),
-				}
-
-				if screen_resolution.x and screen_resolution.y then
-					local resized_success =
-						self:ResizeWindow(window_id, { x = screen_resolution.x, y = screen_resolution.y })
-					local moved_success = self:MoveWindow(window_id, { x = 0, y = 0 })
-
-					if resized_success and moved_success then
-						return true
-					end
-				end
-			end
+			Input:SendKeys("Ctrl+PageUp")
 		end
 	end
 
@@ -217,37 +207,9 @@ end
 
 function WindowManager.SnapWindow(self: WindowManager, window_id: string, side: "Left" | "Right")
 	if PlatformType.OS == "Linux" then
-		if PlatformType.SessionType == "X11" then
-			-- just send Meta Arrow Left if we're on X11 to benefit from multi window resize thing/etc.
-			Input:SendKeys{Input.Keys.Meta, side}
-			return true
-		end
 		if PlatformType.DesktopEnvironment == "KDE" then
-			-- get screen resolution
-			local result = shell(`xrandr | grep '*'`) -- whomever names linux commands needs to stop tbh
-			if result.ok then
-				local x, y = result.out:match("^[%s]*([%w]+)x([%w]+)%s") -- matching output in format "  1920x1080  60.00* ...."
-				if x == nil or y == nil then
-					error("error getting screen resolution with xrandr")
-				end
-
-				local screen_resolution = {
-					x = tonumber(x),
-					y = tonumber(y),
-				}
-
-				if screen_resolution.x and screen_resolution.y then
-					local resized_success = self:ResizeWindow(window_id, { x = screen_resolution.x // 2, y = screen_resolution.y })
-					local moved_success = self:MoveWindow(window_id, { x = if side == "Left" then 0 else 0.5, y = 0 })
-					if resized_success and moved_success then
-						return true
-					else
-						print(`resz: {resized_success}, mov: {moved_success}`)
-					end
-				else
-					error(`xrandr screenresolution not a number? xrandr output: {result.out}`)
-				end
-			end
+			Input:SendKeys("Meta+" .. side)
+			return true
 		end
 	end
 
@@ -259,16 +221,16 @@ local task_view_shown = false
 function WindowManager.ShowTaskView(self: WindowManager)
 	if PlatformType.OS == "Linux" then
 		if PlatformType.DesktopEnvironment == "KDE" then
-			Input:SendKeys{"Ctrl", "F9"}
+			Input:SendKeys("Ctrl+F9")
 		end
 	elseif PlatformType.OS == "Windows" then
-		Input:SendKeys{"Win", "Tab"}
+		Input:SendKeys("Win+Tab")
 	end
 	task_view_shown = true
 end
 
 function WindowManager.HideTaskView(self: WindowManager)
-	Input:SendKeys{Input.Keys.Esc}
+	Input:SendKeys("Esc")
 	task_view_shown = false
 end
 

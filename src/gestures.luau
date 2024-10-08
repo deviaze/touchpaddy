@@ -15,10 +15,10 @@ function Gestures.PointerScroll(delta: { x: number, y: number })
 			local application_name: string = window_info.ClassName
 			if application_name:match("firefox") or application_name:match("edge") or application_name:match("chrom") then
 				if math.abs(delta.x) > math.abs(delta.y) then
-					if delta.x < -6 then
-						Input:SendKeys{"Alt", "Right"}
-					elseif delta.x > 6 then
-						Input:SendKeys{"Alt", "Left"}
+					if delta.x < -8 then
+						Input:SendKeys("Alt+Right")
+					elseif delta.x > 8 then
+						Input:SendKeys("Alt+Left")
 					end
 				end
 			end

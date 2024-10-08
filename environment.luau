@@ -6,6 +6,7 @@ local execs = require("@libraries/exec_async.luau")
 local gui = require("@libraries/gui")
 
 local shell = execs.shell
+local shellAsync = execs.shellAsync
 
 local Environment = {}
 
@@ -54,9 +55,13 @@ if process.os == "linux" then
 				yad = {"KDE", "yad: show guis", "https://github.com/v1cont/yad"},
 				screen = {"touchpaddy", "screen: allows us to run in background/daemonize", "please install screen via package manager"},
 				kdotool = {"KDE", "kdotool: lets us move, open/close, and tab through windows", "https://github.com/jinliu/kdotool"},
-				xdotool = {"X11", "xdotool: allows us to send keystrokes to control windows", "https://github.com/jordansissel/xdotool"},
-				ydotool = {"Wayland", "ydotool: wayland alternative to xdotool; less reliable! if issues, pls switch to X11", "https://github.com/ReimuNotMoe/ydotool"},
 			}
+
+			if Environment.PlatformType.SessionType == "X11" then
+				dependencies.xdotool = {"X11", "xdotool: allows us to send keystrokes to control windows", "https://github.com/jordansissel/xdotool"}
+			elseif Environment.PlatformType.SessionType == "Wayland" then
+				dependencies.ydotool = {"Wayland", "ydotool: wayland alternative to xdotool! if issues, pls switch to X11", "https://github.com/ReimuNotMoe/ydotool"}
+			end
 			
 			local dependencies_failed: { { string } } = {}
 			for command, dependency_info in dependencies do 
@@ -100,6 +105,12 @@ if process.os == "linux" then
 					process.exit(1)
 				end
 			end
+
+			if Environment.PlatformType.OS == "Linux" then
+				shellAsync("ydotoold")
+				print("running ydotoold")
+			end
+
 		end
 	end
 elseif process.os == "windows" then
