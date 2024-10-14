@@ -2,7 +2,7 @@
 Cross-platform (wip) libinput touchpad gesture bindings for Linux, especially for KDE Plasma (6)!
 ## Features
 ### Two finger forward/back in web browsers
-- A quick two-finger horizontal "scroll" should prompt back/forwards in Firefox, Edge, and Chromium-based web browsers. (X11 w/ xdotool)
+- A quick two-finger horizontal "scroll" should prompt back/forwards in Firefox, Edge, and Chromium-based web browsers.
 ### Three finger gestures
 - swipe left-right to `Alt-Tab` between open windows
 - swipe up to view the task view/present windows/grid display view like Windows + Tab on Windows
@@ -15,14 +15,16 @@ Cross-platform (wip) libinput touchpad gesture bindings for Linux, especially fo
 Gestures are defined in `./src/gestures.luau`; please feel free to add more gestures and if you have some good ones, PR them in! 
 
 ## Dependencies
-1. The Lune runtime for Luau; requires the lune-process-stream PR: https://github.com/0x5eal/lune-process-stream
-2. yad for gui dialogs
-3. screen to run in background
-3. kdotool (KDE Plasma 6)
-4. ydotool (X11)
+1. Cargo to build Lune
+2. The Lune runtime for Luau; requires the lune-process-stream PR: https://github.com/0x5eal/lune-process-stream
+3. yad for gui dialogs
+4. screen to run in background
+5. kdotool (for KDE Plasma 6)
+6. ydotool (for both X11 and Wayland)
 
 ## Install
-- clone and build [lunestream](https://github.com/0x5eal/lune-process-stream)
+- ensure you have dependencies installed, including Cargo to build Rust projects, yad, screen, kdotool, and ydotool. You can install these from your favorite package manager.
+- clone and build [lunestream](https://github.com/0x5eal/lune-process-stream) with `cargo build --release`
 - add `lunestream` to your PATH
 - run touchpaddy with `lunestream run path_to_touchpaddy` or `./path_to_touchpaddy/init.luau`, whichever works
 
