@@ -9,8 +9,8 @@ Cross-platform (wip) libinput touchpad gesture bindings for Linux, especially fo
 - swipe down to minimize all active windows (manually minimizes them with kwin, doesn't do the Meta + D Plasma keybind)
 ### Four finger gestures
 - swipe left-right to quickly snap the active window to the left and right respectively
-- swipe down to minimize the active window
-- swipe up to maximize the active window
+- swipe down to minimize the active window (conflicts with hardcoded Plasma 6 gestures in Wayland :/)
+- swipe up to maximize the active window (conflicts with hardcoded Plasma 6 gestures in Wayland :/)
 
 Gestures are defined in `./src/gestures.luau`; please feel free to add more gestures and if you have some good ones, PR them in! 
 
@@ -19,10 +19,11 @@ Gestures are defined in `./src/gestures.luau`; please feel free to add more gest
 2. yad for gui dialogs
 3. screen to run in background
 3. kdotool (KDE Plasma 6)
-4. xdotool (X11)
+4. ydotool (X11)
 
 ## Install
 - clone and build [lunestream](https://github.com/0x5eal/lune-process-stream)
 - add `lunestream` to your PATH
 - run touchpaddy with `lunestream run path_to_touchpaddy` or `./path_to_touchpaddy/init.luau`, whichever works
+
 Install script and QoL improvements forthcoming.
